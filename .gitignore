@@ -1,0 +1,28 @@
+# Data
+data/paysim.csv
+
+# Model artifact (optional — uncomment to exclude)
+# api/model/model.pkl
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Environments
+.env
+.venv/
+venv/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+CLAUDE.md

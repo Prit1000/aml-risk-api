@@ -1,0 +1,29 @@
+aml-risk-api/
+├── data/
+│   └── paysim.csv              # gitignored (too big)
+├── download_data.py            # ← Kaggle fetch script 
+├── notebooks/
+│   ├── 01_eda.ipynb            # ← split EDA out 
+│   └── 02_model_comparison.ipynb
+├── train_model.py              # final: train winner on full data + save
+├── api/
+│   ├── main.py                 # home / health / predict
+│   ├── schema/
+│   │   ├── user_input.py
+│   │   └── prediction_response.py
+│   ├── model/
+│   │   ├── model.pkl
+│   │   ├── config.json         # ← threshold + band cutoffs 
+│   │   ├── metrics.json        # ← saved eval numbers for README 
+│   │   └── predict.py
+│   ├── requirements.txt
+│   └── Dockerfile
+├── ui/
+│   ├── app.py
+│   ├── requirements.txt
+│   └── Dockerfile
+├── sample_requests.json        # ← known fraud + legit payloads 
+├── .dockerignore               # ← exclude data/, notebooks/ 
+├── .gitignore                  # ← exclude paysim.csv, model.pkl optional
+├── docker-compose.yml
+└── README.md
