@@ -1,0 +1,45 @@
+{
+  "threshold": 0.994579,
+  "risk_bands": {
+    "low": [
+      0.0,
+      0.3
+    ],
+    "medium": [
+      0.3,
+      0.7
+    ],
+    "high": [
+      0.7,
+      1.0
+    ]
+  },
+  "feature_columns": [
+    "amount",
+    "oldbalanceOrg",
+    "newbalanceOrig",
+    "oldbalanceDest",
+    "newbalanceDest",
+    "isFlaggedFraud",
+    "is_cash_out",
+    "is_transfer",
+    "error_balance_orig",
+    "error_balance_dest",
+    "orig_balance_zero_before",
+    "orig_balance_zero_after",
+    "dest_balance_zero_before",
+    "amount_to_orig_balance",
+    "amount_to_dest_balance",
+    "balance_change_orig",
+    "balance_change_dest",
+    "dest_is_merchant",
+    "orig_txn_count",
+    "orig_total_sent",
+    "orig_avg_amount",
+    "orig_max_amount",
+    "orig_unique_dest",
+    "dest_txn_count",
+    "dest_total_received",
+    "dest_unique_senders"
+  ]
+}
