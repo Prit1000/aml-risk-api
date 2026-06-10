@@ -1,118 +1,185 @@
-# aml-risk-api
+# AML Risk API
 
-An Anti-Money Laundering (AML) transaction risk scoring system. Trains a classifier on the [PaySim](https://www.kaggle.com/datasets/ealaxi/paysim1) synthetic mobile-money dataset, serves predictions through a FastAPI REST endpoint, and provides a Streamlit UI   all containerized with Docker Compose.
+An Anti-Money Laundering (AML) transaction risk scoring system built on the [PaySim](https://www.kaggle.com/datasets/ealaxi/paysim1) synthetic mobile money dataset. The project covers the full ML lifecycle — data ingestion, exploratory analysis, model comparison, training, and production serving — all containerized with Docker Compose.
 
 ---
 
-## Project Structure
+## Architecture
 
 ```
 aml-risk-api/
-%%% data/
-%   %%% paysim.csv                        # gitignored (download separately)
-%%% download_data.py                      # Kaggle dataset fetch script
-%%% train_model.py                        # Train winner model on full data & save artifacts
-%%% notebooks/
-%   %%% 1_eda.ipynb                       # Exploratory data analysis
-%   %%% 02_model_comparison.ipynb         # Model comparison & selection
-%   %%% 1_eda_report.md                   # GitHub-readable EDA summary
-%   %%% docs/
-%       %%% 1_eda.html                    # Quarto-rendered EDA report
-%%% api/
-%   %%% main.py                           # FastAPI app   /, /health, /predict
-%   %%% schema/
-%   %   %%% user_input.py                 # Pydantic request model
-%   %   %%% prediction_response.py        # Pydantic response model
-%   %%% model/
-%   %   %%% predict.py                    # Inference logic
-%   %   %%% model.pkl                     # Serialized trained model
-%   %   %%% config.json                   # Decision threshold + risk band cutoffs
-%   %   %%% metrics.json                  # Saved evaluation metrics
-%   %%% requirements.txt
-%   %%% Dockerfile
-%%% ui/
-%   %%% app.py                            # Streamlit front-end
-%   %%% requirements.txt
-%   %%% Dockerfile
-%%% sample_requests.json                  # Known fraud + legit payloads for testing
-%%% docker-compose.yml
+├── download_data.py            # Kaggle dataset fetch script
+├── train_model.py              # Train winner model on full data, save artifacts
+├── sample_requests.json        # Known fraud + legitimate payloads for testing
+├── docker-compose.yml
+├── api/
+│   ├── main.py                 # FastAPI app — GET /, GET /health, POST /predict
+│   ├── schema/
+│   │   ├── user_input.py       # Pydantic request model (transaction features)
+│   │   └── prediction_response.py  # Pydantic response model (score, band, label)
+│   ├── model/
+│   │   ├── predict.py          # Loads model.pkl + config.json, exposes predict()
+│   │   ├── model.pkl           # Serialized sklearn/XGBoost model
+│   │   ├── config.json         # Decision threshold + risk band boundaries
+│   │   └── metrics.json        # Eval metrics snapshot
+│   ├── requirements.txt
+│   └── Dockerfile
+├── ui/
+│   ├── app.py                  # Streamlit front-end — calls POST /predict
+│   ├── requirements.txt
+│   └── Dockerfile
+└── notebooks/
+    ├── 1_eda.ipynb             # Exploratory data analysis
+    ├── 02_model_comparison.ipynb   # Candidate model comparison
+    ├── 1_eda_report.md         # GitHub-readable EDA summary
+    └── docs/                   # Quarto-rendered HTML reports
 ```
+
+### Request → Response flow
+
+1. The Streamlit UI submits a transaction JSON to `POST /predict`.
+2. `user_input.py` validates the incoming request via Pydantic.
+3. `predict.py` loads `model.pkl` and applies the trained classifier to produce a fraud probability.
+4. The probability is mapped to a named risk band using the cutoffs in `config.json`.
+5. `prediction_response.py` structures the response: risk score, risk band, and `is_fraud` label.
 
 ---
 
 ## Quickstart
 
-### 1. Download the dataset
+### 1. Get the data
+
+The PaySim CSV is too large for git. Fetch it from Kaggle:
 
 ```bash
 python download_data.py
 ```
 
-### 2. Train the model
+> Requires a Kaggle API token (`~/.kaggle/kaggle.json`).
+
+### 2. Set up the Python environment
+
+```bash
+python -m venv venv
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # macOS / Linux
+
+pip install -r api/requirements.txt
+pip install -r ui/requirements.txt
+```
+
+### 3. Train the model
 
 ```bash
 python train_model.py
 ```
 
-Outputs `api/model/model.pkl`, `api/model/config.json`, and `api/model/metrics.json`.
+Writes:
+- `api/model/model.pkl` — serialized classifier
+- `api/model/config.json` — decision threshold + risk band cutoffs
+- `api/model/metrics.json` — evaluation metrics snapshot
 
-### 3. Run with Docker Compose
+### 4. Run with Docker Compose (recommended)
 
 ```bash
 docker compose up --build
 ```
 
 | Service | URL |
-| ------- | --- |
+|---------|-----|
 | API | http://localhost:8000 |
 | UI | http://localhost:8501 |
 
----
-
-## API Endpoints
-
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| `GET` | `/` | Home / version info |
-| `GET` | `/health` | Health check |
-| `POST` | `/predict` | Score a transaction |
-
-### Example request
+### 5. Run individual services (dev mode)
 
 ```bash
-curl -X POST http://localhost:8000/predict \
-    -H "Content-Type: application/json" \
-    -d @sample_requests.json
+# API
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+
+# UI
+streamlit run ui/app.py
 ```
 
-### Example response
+---
+
+## API reference
+
+### `POST /predict`
+
+Scores a single transaction and returns a risk assessment.
+
+**Request body** (JSON):
 
 ```json
 {
-    "fraud_probability": 0.94,
-    "risk_band": "HIGH",
-    "is_fraud": true
+  "step": 1,
+  "type": "TRANSFER",
+  "amount": 181.0,
+  "nameOrig": "C1305486145",
+  "oldbalanceOrg": 181.0,
+  "newbalanceOrig": 0.0,
+  "nameDest": "C553264065",
+  "oldbalanceDest": 0.0,
+  "newbalanceDest": 0.0
 }
 ```
 
+**Response** (JSON):
+
+```json
+{
+  "fraud_probability": 0.94,
+  "risk_band": "HIGH",
+  "is_fraud": true
+}
+```
+
+### `GET /health`
+
+Returns `{"status": "ok"}` — suitable for container health checks.
+
+### `GET /`
+
+Returns API metadata and version info.
+
 ---
 
-## Development (without Docker)
+## Risk bands
+
+Risk band boundaries are defined in `api/model/config.json` and are not hardcoded in application logic. Typical bands:
+
+| Band | Description |
+|------|-------------|
+| LOW | Score below low-risk threshold |
+| MEDIUM | Score between low and high thresholds |
+| HIGH | Score above high-risk threshold |
+
+---
+
+## Notebooks
+
+Notebooks are rendered to HTML via [Quarto](https://quarto.org/) and committed under `notebooks/docs/`.
 
 ```bash
-python -m venv venv
-venv\Scripts\activate          # Windows
-source venv/bin/activate       # macOS/Linux
-
-pip install -r api/requirements.txt
-pip install -r ui/requirements.txt
-
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000   # API
-streamlit run ui/app.py                                      # UI (separate terminal)
+quarto render notebooks/1_eda.ipynb --to html --output-dir docs
+quarto render notebooks/02_model_comparison.ipynb --to html --output-dir docs
 ```
+
+| Notebook | Purpose |
+|----------|---------|
+| `1_eda.ipynb` | Class imbalance, feature distributions, correlation analysis |
+| `02_model_comparison.ipynb` | Compares candidate models (precision, recall, AUC-PR), selects winner |
+
+A GitHub-readable EDA summary is also available at [`notebooks/1_eda_report.md`](notebooks/1_eda_report.md).
 
 ---
 
 ## Dataset
 
-[PaySim](https://www.kaggle.com/datasets/ealaxi/paysim1) is a synthetic financial dataset simulating mobile money transactions, designed for fraud detection research. `data/paysim.csv` is excluded from version control due to its size   run `download_data.py` to fetch it.
+[PaySim](https://www.kaggle.com/datasets/ealaxi/paysim1) is a synthetic mobile money transaction simulator based on real transaction logs. It contains ~6.3 million transactions with a ~0.13% fraud rate, making it a realistic highly-imbalanced classification benchmark.
+
+---
+
+## License
+
+This project is for educational and demonstration purposes. The PaySim dataset is provided by Kaggle under its own terms.
