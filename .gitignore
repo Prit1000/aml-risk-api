@@ -1,5 +1,6 @@
 # Data
 data/paysim.csv
+data/*.csv
 
 # Model artifact (optional — uncomment to exclude)
 # api/model/model.pkl
@@ -9,20 +10,48 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pdb
 *.egg-info/
 dist/
 build/
+*.whl
 
 # Environments
 .env
+.env.*
 .venv/
 venv/
 
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Type checkers & linters
+.mypy_cache/
+.ruff_cache/
+
 # Jupyter checkpoints
 .ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
 
+# Project-specific
+instruction.txt
 CLAUDE.md
