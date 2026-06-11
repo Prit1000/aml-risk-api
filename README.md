@@ -21,7 +21,9 @@ aml-risk-api/
 │   │   ├── predict.py          # Loads model.pkl + config.json, exposes predict()
 │   │   ├── model.pkl           # Serialized sklearn/XGBoost model
 │   │   ├── config.json         # Decision threshold + risk band boundaries
-│   │   └── metrics.json        # Eval metrics snapshot
+│   │   ├── metrics.json        # Eval metrics snapshot
+│   │   ├── orig_agg_lookup.parquet  # Per-originator behavioural aggregates
+│   │   └── dest_agg_lookup.parquet  # Per-destination behavioural aggregates
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── ui/
@@ -30,7 +32,7 @@ aml-risk-api/
 │   └── Dockerfile
 └── notebooks/
     ├── 1_eda.ipynb             # Exploratory data analysis
-    ├── 02_model_comparison.ipynb   # Candidate model comparison
+    ├── 02_model_comparision.ipynb  # Candidate model comparison
     ├── 1_eda_report.md         # GitHub-readable EDA summary
     └── docs/                   # Quarto-rendered HTML reports
 ```
@@ -148,11 +150,11 @@ Returns API metadata and version info.
 
 Risk band boundaries are defined in `api/model/config.json` and are not hardcoded in application logic. Typical bands:
 
-| Band | Description |
-|------|-------------|
-| LOW | Score below low-risk threshold |
-| MEDIUM | Score between low and high thresholds |
-| HIGH | Score above high-risk threshold |
+| Band | Score range | Description |
+|------|-------------|-------------|
+| LOW | < 0.3 | Likely legitimate transaction |
+| MEDIUM | 0.3 – 0.7 | Elevated risk, warrants review |
+| HIGH | ≥ 0.7 | High fraud probability, flag for investigation |
 
 ---
 
@@ -162,13 +164,13 @@ Notebooks are rendered to HTML via [Quarto](https://quarto.org/) and committed u
 
 ```bash
 quarto render notebooks/1_eda.ipynb --to html --output-dir docs
-quarto render notebooks/02_model_comparison.ipynb --to html --output-dir docs
+quarto render notebooks/02_model_comparision.ipynb --to html --output-dir docs
 ```
 
 | Notebook | Purpose |
 |----------|---------|
 | `1_eda.ipynb` | Class imbalance, feature distributions, correlation analysis |
-| `02_model_comparison.ipynb` | Compares candidate models (precision, recall, AUC-PR), selects winner |
+| `02_model_comparision.ipynb` | Compares candidate models (precision, recall, AUC-PR), selects winner |
 
 A GitHub-readable EDA summary is also available at [`notebooks/1_eda_report.md`](notebooks/1_eda_report.md).
 
