@@ -75,15 +75,17 @@ pip install -r ui/requirements.txt
 
 ### 3. Train the model
 
-```bash
-python train_model.py
-```
+Training is done in Google Colab. Open the notebook:
 
-This writes the following artifacts to `api/model/`:
+`notebooks/02_model_comparison.ipynb`
+
+After the notebook completes, the following artifacts are saved to `api/model/`:
 
 - `model.pkl` — serialized XGBoost classifier
 - `config.json` — decision threshold + feature columns + risk band cutoffs
 - `metrics.json` — evaluation metrics snapshot (PR-AUC, F1, threshold)
+
+These artifacts are excluded from git. After training, download them from Colab and place them in `api/model/` before running the API.
 
 ### 4. Run with Docker Compose (recommended)
 
