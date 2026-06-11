@@ -4,6 +4,12 @@ An Anti-Money Laundering (AML) transaction risk scoring system built on the [Pay
 
 ---
 
+## Demo
+
+![AML Risk API demo](aml_demo.gif)
+
+---
+
 ## Architecture
 
 ```
@@ -15,15 +21,13 @@ aml-risk-api/
 ├── api/
 │   ├── main.py                 # FastAPI app — GET /, GET /health, POST /predict
 │   ├── schema/
-│   │   ├── user_input.py       # Pydantic request model (transaction features)
-│   │   └── prediction_response.py  # Pydantic response model (score, band, label)
+│   │   ├── user_input.py       # Pydantic request model; derives 12 features via @computed_field
+│   │   └── prediction_response.py  # Pydantic response model (score, band, label, threshold)
 │   ├── model/
 │   │   ├── predict.py          # Loads model.pkl + config.json, exposes predict()
 │   │   ├── model.pkl           # Serialized sklearn/XGBoost model
-│   │   ├── config.json         # Decision threshold + risk band boundaries
-│   │   ├── metrics.json        # Eval metrics snapshot
-│   │   ├── orig_agg_lookup.parquet  # Per-originator behavioural aggregates
-│   │   └── dest_agg_lookup.parquet  # Per-destination behavioural aggregates
+│   │   ├── config.json         # Decision threshold + feature columns + risk band boundaries
+│   │   └── metrics.json        # Eval metrics snapshot
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── ui/
@@ -40,24 +44,23 @@ aml-risk-api/
 ### Request → Response flow
 
 1. The Streamlit UI submits a transaction JSON to `POST /predict`.
-2. `user_input.py` validates the incoming request via Pydantic.
+2. `user_input.py` validates the 8 raw fields and derives 12 features via `@computed_field`.
 3. `predict.py` loads `model.pkl` and applies the trained classifier to produce a fraud probability.
 4. The probability is mapped to a named risk band using the cutoffs in `config.json`.
-5. `prediction_response.py` structures the response: risk score, risk band, and `is_fraud` label.
+5. `prediction_response.py` structures the response: risk score, risk band, `is_fraud` label, and the threshold applied.
 
 ---
 
 ## Quickstart
 
-### 1. Get the data
+### 1. Get the training data
 
-The PaySim CSV is too large for git. Fetch it from Kaggle:
+The PaySim CSV is too large for git and is excluded via `.gitignore`.
+Download it from Kaggle and place it in the `data/` folder:
 
-```bash
-python download_data.py
-```
+[PaySim Dataset — Kaggle](https://www.kaggle.com/datasets/ealaxi/paysim1)
 
-> Requires a Kaggle API token (`~/.kaggle/kaggle.json`).
+Expected path: `data/PS_20174392719_1491204439457_log.csv`
 
 ### 2. Set up the Python environment
 
@@ -76,10 +79,11 @@ pip install -r ui/requirements.txt
 python train_model.py
 ```
 
-Writes:
-- `api/model/model.pkl` — serialized classifier
-- `api/model/config.json` — decision threshold + risk band cutoffs
-- `api/model/metrics.json` — evaluation metrics snapshot
+This writes the following artifacts to `api/model/`:
+
+- `model.pkl` — serialized XGBoost classifier
+- `config.json` — decision threshold + feature columns + risk band cutoffs
+- `metrics.json` — evaluation metrics snapshot (PR-AUC, F1, threshold)
 
 ### 4. Run with Docker Compose (recommended)
 
@@ -94,11 +98,13 @@ docker compose up --build
 
 ### 5. Run individual services (dev mode)
 
+**Important:** run from the repo root, not from inside `api/`, because imports use the `api.` package prefix.
+
 ```bash
 # API
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
-# UI
+# UI — update API_URL in ui/app.py to http://localhost:8000/predict
 streamlit run ui/app.py
 ```
 
@@ -114,15 +120,14 @@ Scores a single transaction and returns a risk assessment.
 
 ```json
 {
-  "step": 1,
-  "type": "TRANSFER",
-  "amount": 181.0,
-  "nameOrig": "C1305486145",
-  "oldbalanceOrg": 181.0,
+  "type": "CASH_OUT",
+  "amount": 187629.11,
+  "nameOrig": "C1231006815",
+  "oldbalanceOrg": 187629.11,
   "newbalanceOrig": 0.0,
   "nameDest": "C553264065",
   "oldbalanceDest": 0.0,
-  "newbalanceDest": 0.0
+  "newbalanceDest": 187629.11
 }
 ```
 
@@ -130,31 +135,78 @@ Scores a single transaction and returns a risk assessment.
 
 ```json
 {
-  "fraud_probability": 0.94,
-  "risk_band": "HIGH",
-  "is_fraud": true
+  "risk_score": 0.9978,
+  "risk_band": "high",
+  "is_fraud": true,
+  "threshold_used": 0.909418
 }
 ```
 
 ### `GET /health`
 
-Returns `{"status": "ok"}` — suitable for container health checks.
+Returns service and model status — suitable for container health checks.
+
+```json
+{
+  "status": "ok",
+  "model_loaded": true,
+  "n_features": 17,
+  "threshold": 0.909418
+}
+```
 
 ### `GET /`
 
 Returns API metadata and version info.
 
+Interactive docs are available at `http://localhost:8000/docs`.
+
+---
+
+## Feature engineering
+
+`UserInput` derives 12 features from the 8 raw API inputs via `@computed_field`:
+
+| Group | Features |
+|-------|----------|
+| Raw PaySim | `amount`, `oldbalanceOrg`, `newbalanceOrig`, `oldbalanceDest`, `newbalanceDest` |
+| Type flags | `is_cash_out`, `is_transfer` |
+| Balance errors | `error_balance_orig`, `error_balance_dest` |
+| Balance states | `orig_balance_zero_before`, `orig_balance_zero_after`, `dest_balance_zero_before` |
+| Ratios / deltas | `amount_to_orig_balance`, `amount_to_dest_balance`, `balance_change_orig`, `balance_change_dest` |
+| Identity | `dest_is_merchant` (`nameDest` starts with `"M"`) |
+
+The full feature list used by the model is defined in `api/model/config.json` under `feature_columns`.
+
 ---
 
 ## Risk bands
 
-Risk band boundaries are defined in `api/model/config.json` and are not hardcoded in application logic. Typical bands:
+Risk band boundaries are defined in `api/model/config.json` and are not hardcoded in application logic.
 
 | Band | Score range | Description |
 |------|-------------|-------------|
-| LOW | < 0.3 | Likely legitimate transaction |
-| MEDIUM | 0.3 – 0.7 | Elevated risk, warrants review |
-| HIGH | ≥ 0.7 | High fraud probability, flag for investigation |
+| `low` | < 0.3 | Likely legitimate transaction |
+| `medium` | 0.3 – 0.7 | Elevated risk, warrants review |
+| `high` | ≥ 0.7 | High fraud probability, flag for investigation |
+
+---
+
+## Model performance
+
+Metrics are sourced from `api/model/metrics.json` (authoritative — do not hardcode elsewhere).
+
+| Metric | Value |
+|--------|-------|
+| PR-AUC | 0.9987 |
+| ROC-AUC | 0.9996 |
+| Precision | 1.0000 |
+| Recall | 0.9976 |
+| F1 | 0.9988 |
+| Decision threshold | 0.909418 |
+| Test fraud / total | 1 643 / 1 272 524 |
+
+The threshold is tuned for maximum F1 on a heavily imbalanced dataset (~0.13% fraud rate). Changing it shifts the precision/recall trade-off; update both `config.json` and `metrics.json` together.
 
 ---
 
