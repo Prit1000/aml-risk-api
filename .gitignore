@@ -55,3 +55,4 @@ $RECYCLE.BIN/
 # Project-specific
 instruction.txt
 CLAUDE.md
+api/model/orig_agg_lookup.parquet
